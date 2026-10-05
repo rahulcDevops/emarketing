@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: leadsentry-training-${RUN_ID}
+  namespace: leadsentry
+  labels:
+    app: leadsentry-training
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: leadsentry-training
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: ${IMAGE_URI}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://leadsentry-mlflow.leadsentry.svc.cluster.local:5000"
+            - name: MODEL_S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: leadsentry-config
+                  key: MODEL_S3_BUCKET
+            - name: AWS_DEFAULT_REGION
+              value: "ap-south-1"
+            - name: GITHUB_SHA
+              value: "${GITHUB_SHA}"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: leadsentry-aws-secrets
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: leadsentry-aws-secrets
+                  key: AWS_SECRET_ACCESS_KEY

@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: leadsentry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow123
+      POSTGRES_DB: mlflow_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - leadsentry-net
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: leadsentry-mlflow
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./artifacts:/mlflow/artifacts
+    environment:
+      - DATABASE_URL=postgresql://mlflow:mlflow123@postgres:5432/mlflow_db
+      # If you set ARTIFACT_ROOT in your shell or .env, it uses that; otherwise defaults to local /mlflow/artifacts
+      - ARTIFACT_ROOT=${ARTIFACT_ROOT:-/mlflow/artifacts}
+      # For S3, export these or add to .env:
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      # - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+    command: >
+      sh -c "mlflow server
+      --backend-store-uri $${DATABASE_URL}
+      --default-artifact-root $${ARTIFACT_ROOT}
+      --host 0.0.0.0
+      --port 5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - leadsentry-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: leadsentry-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./reports:/app/reports
+    environment:
+      - ENVIRONMENT=production
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")'"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - leadsentry-net
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: leadsentry-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    restart: unless-stopped
+    networks:
+      - leadsentry-net
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: leadsentry-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - leadsentry-net
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  leadsentry-net:
+    driver: bridge

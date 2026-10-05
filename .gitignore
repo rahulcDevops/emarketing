@@ -1,0 +1,76 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Environment configuration
+.env
+.env.*
+!.env.example
+
+# Operating System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing & code quality
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local data (keep directory structure tracked via .gitkeep)
+data/*
+!data/.gitkeep
+
+# Model artifacts (keep directory structure tracked via .gitkeep)
+artifacts/*
+!artifacts/.gitkeep
+artifacts/model.joblib
+*.tar.gz
+
+# MLflow tracking backend & runs
+mlruns/
+mlflow.db
+*.sqlite
+
+# Reports
+reports/*
+!reports/.gitkeep
+
+# Generated / rendered Kubernetes manifests
+k8s/training-job.yaml
