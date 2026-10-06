@@ -2,19 +2,23 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application and training logic
+# Copy training source code
 COPY training/ training/
-COPY data/ data/
-COPY artifacts/ artifacts/
 
-ENTRYPOINT ["python", "-m", "training.retrain"]
+# Ensure runtime directories exist instead of copying non-tracked host directories
+RUN mkdir -p data artifacts /tmp/mlflow
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "training.retrain"]
