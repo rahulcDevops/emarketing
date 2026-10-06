@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: leadsentry-training-{{JOB_NAME}}
+  labels:
+    app: leadsentry-training
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        job-name: leadsentry-training-{{JOB_NAME}}
+        app: leadsentry-training
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: trainer
+          image: {{IMAGE_URI}}
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "{{MLFLOW_TRACKING_URI}}"
+            - name: MODEL_S3_BUCKET
+              value: "{{MODEL_S3_BUCKET}}"
+            - name: AWS_DEFAULT_REGION
+              value: "ap-south-1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
