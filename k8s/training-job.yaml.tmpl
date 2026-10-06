@@ -18,6 +18,7 @@ spec:
         - name: trainer
           image: {{IMAGE_URI}}
           imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "python -m training.train && python -m training.retrain"]
           resources:
             requests:
               cpu: "250m"
