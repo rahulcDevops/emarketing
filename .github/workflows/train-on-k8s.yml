@@ -1,0 +1,63 @@
+name: Train and Retrain Pipeline (Ephemeral K8s Batch)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual training run"
+        required: false
+        default: "Validation of batch retraining pipeline"
+
+jobs:
+  train-on-k8s:
+    name: Build & Run Ephemeral K8s Batch Job
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Training Image Locally
+        run: |
+          docker build \
+            -f Dockerfile.training \
+            -t leadsentry-training:${{ github.sha }} .
+
+      - name: Create Local Kubernetes Cluster (Kind)
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: leadsentry-ci-cluster
+
+      - name: Load Docker Image into Kind Cluster
+        run: |
+          kind load docker-image leadsentry-training:${{ github.sha }} --name leadsentry-ci-cluster
+
+      - name: Render Manifest and Dispatch K8s Job
+        env:
+          JOB_NAME: "leadsentry-train-${{ github.run_id }}"
+        run: |
+          echo "Dispatching Kubernetes Job: $JOB_NAME"
+
+          sed -e "s|{{IMAGE_URI}}|leadsentry-training:${{ github.sha }}|g" \
+              -e "s|{{JOB_NAME}}|$JOB_NAME|g" \
+              -e "s|{{MLFLOW_TRACKING_URI}}|sqlite:///tmp/mlflow.db|g" \
+              -e "s|{{MODEL_S3_BUCKET}}|mock-local-bucket|g" \
+              k8s/training-job.yaml.tmpl > /tmp/rendered-job.yaml
+
+          sed -i 's|imagePullPolicy: Always|imagePullPolicy: IfNotPresent|g' /tmp/rendered-job.yaml
+
+          kubectl apply -f /tmp/rendered-job.yaml
+
+      - name: Stream Pod Logs & Await Completion
+        env:
+          JOB_NAME: "leadsentry-train-${{ github.run_id }}"
+        run: |
+          echo "Waiting for pod to initialize..."
+          kubectl wait --for=condition=ready pod -l job-name=$JOB_NAME --timeout=120s || true
+
+          kubectl logs -f job/$JOB_NAME --tail=100 || true
+
+          kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s
