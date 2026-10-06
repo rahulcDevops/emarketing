@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: leadsentry-training-{{JOB_NAME}}
+  name: {{JOB_NAME}}
   labels:
     app: leadsentry-training
 spec:
@@ -10,7 +10,7 @@ spec:
   template:
     metadata:
       labels:
-        job-name: leadsentry-training-{{JOB_NAME}}
+        job-name: {{JOB_NAME}}
         app: leadsentry-training
     spec:
       restartPolicy: Never
