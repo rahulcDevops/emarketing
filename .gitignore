@@ -56,6 +56,8 @@ htmlcov/
 # Local data (keep directory structure tracked via .gitkeep)
 data/*
 !data/.gitkeep
+!data/.gitignore
+!data/*.dvc
 
 # Model artifacts (keep directory structure tracked via .gitkeep)
 artifacts/*

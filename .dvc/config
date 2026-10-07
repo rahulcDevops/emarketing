@@ -1,0 +1,7 @@
+[core]
+    remote = local_storage
+    analytics = false
+['remote "local_storage"']
+    url = /Users/rahul/.dvc-storage/leadsentry
+['remote "s3_storage"']
+    url = s3://leadsentry-mlops-artifacts/dvc-storage
