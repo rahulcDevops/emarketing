@@ -7,3 +7,7 @@ __pycache__/
 .git/
 .gitignore
 data/
+
+# Whitelist the parquet dataset and DVC pointer
+!data/email_replies_real.parquet
+!data/*.dvc
