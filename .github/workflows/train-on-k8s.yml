@@ -23,20 +23,18 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install DVC & Restore Data
+      - name: Install Dependencies & Restore DVC Data
         run: |
-          pip install dvc
-          # Set up runner's local DVC storage directory
-          mkdir -p /tmp/dvc-storage
+          pip install --no-cache-dir -r requirements.txt dvc
+          mkdir -p /tmp/dvc-storage data
           dvc remote add -f -d ci_storage /tmp/dvc-storage
-          
-          # If dataset doesn't exist on runner, generate baseline data and register to DVC
+
           if [ ! -f data/email_replies_real.parquet ]; then
-            echo "[CI] Generating baseline training dataset for ephemeral run..."
-            python -m training.data
-            dvc commit data/email_replies_real.parquet.dvc
+            echo "[CI] Generating baseline training dataset via training.dataset..."
+            PYTHONPATH=. python -m training.dataset
+            dvc commit -f data/email_replies_real.parquet.dvc
           fi
-          
+
           ls -lh data/
 
       - name: Set up Docker Buildx
