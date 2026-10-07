@@ -12,13 +12,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy training source code
+# Copy source code and DVC tracking pointer
 COPY training/ training/
+COPY data/*.dvc data/
 
-# Ensure runtime directories exist instead of copying non-tracked host directories
-RUN mkdir -p data artifacts /tmp/mlflow
+# Copy the actual dataset hydrated by CI/host runner
+COPY data/email_replies_real.parquet data/email_replies_real.parquet
+
+# Create output and tracking directories
+RUN mkdir -p artifacts /tmp/mlflow
 
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV GIT_PYTHON_REFRESH=quiet
 
-CMD ["python", "-m", "training.retrain"]
+CMD ["sh", "-c", "python -m training.train && python -m training.retrain"]
