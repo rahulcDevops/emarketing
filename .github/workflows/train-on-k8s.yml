@@ -30,8 +30,8 @@ jobs:
           dvc remote add -f -d ci_storage /tmp/dvc-storage
 
           if [ ! -f data/email_replies_real.parquet ]; then
-            echo "[CI] Generating baseline training dataset via training.dataset..."
-            PYTHONPATH=. python -m training.dataset
+            echo "[CI] Generating real training dataset via training.dataset.generate_email_dataset()..."
+            PYTHONPATH=. python -c "from training.dataset import generate_email_dataset; generate_email_dataset()"
             dvc commit -f data/email_replies_real.parquet.dvc
           fi
 
