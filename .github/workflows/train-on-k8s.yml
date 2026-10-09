@@ -8,6 +8,9 @@ on:
         required: false
         default: "Validation of batch retraining pipeline"
 
+permissions:
+  contents: write
+
 jobs:
   train-on-k8s:
     name: Build & Run Ephemeral K8s Batch Job
@@ -16,6 +19,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python for DVC
         uses: actions/setup-python@v5
@@ -81,3 +86,33 @@ jobs:
           kubectl logs -f job/$JOB_NAME --tail=100 || true
 
           kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s
+
+      - name: GitOps Model Promotion (Update Serving Manifest)
+        run: |
+          IMAGE_TAG="sha-${{ github.sha }}"
+          DEPLOYMENT_FILE="k8s/serving/deployment.yaml"
+
+          if [ ! -f "$DEPLOYMENT_FILE" ]; then
+            echo "[GitOps Error] $DEPLOYMENT_FILE not found. Ensure k8s/serving/deployment.yaml is created."
+            exit 1
+          fi
+
+          echo "[GitOps] Promoting new champion model image tag: ${IMAGE_TAG}"
+
+          # Update the container image line in deployment.yaml
+          sed -i "s|image: ghcr.io/.*/leadsentry-api:.*|image: ghcr.io/${{ github.repository }}/leadsentry-api:${IMAGE_TAG}|" ${DEPLOYMENT_FILE}
+
+          # If the file didn't change (e.g., same commit re-run), exit cleanly
+          if git diff --quiet ${DEPLOYMENT_FILE}; then
+            echo "[GitOps] No manifest change detected. Skipping commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add ${DEPLOYMENT_FILE}
+          git commit -m "chore(gitops): promote leadsentry-api to ${IMAGE_TAG} [skip ci]"
+
+          git pull --rebase origin main
+          git push origin main
