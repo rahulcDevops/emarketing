@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: leadsentry-config
-  namespace: leadsentry-prod
-data:
-  APP_ENV: "production"
-  MODEL_NAME: "leadsentry-intent-model"
-  LOG_LEVEL: "INFO"

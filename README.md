@@ -1,149 +1,147 @@
-Emarketing is a production-oriented MLOps platform for customer-intent classification. It combines automated retraining, model governance, quality gates, immutable artifact releases, and zero-downtime inference deployment.
+# Emarketing
+Production-oriented MLOps for customer-intent classification.
 
-The platform separates rapid local development from cloud-native training workloads, using Kubernetes Jobs for isolated retraining and MLflow aliases to enforce Champion/Challenger promotion policies.
-
-## Key capabilities
-
-- **Automated retraining** — runs isolated, resource-constrained Kubernetes training Jobs.
-- **Model governance** — promotes models through MLflow `champion` and `challenger` aliases.
-- **Quality gates** — blocks model releases that fall below absolute or historical quality thresholds.
-- **Data protection** — sanitizes feedback data by removing invalid labels, malformed text, and duplicates.
-- **Immutable releases** — packages validated model artifacts and metadata into versioned Amazon S3 bundles.
-- **Production serving** — exposes predictions through a FastAPI service designed for blue/green rollouts.
-- **Observability** — exports API latency, request volume, and prediction-distribution metrics to Prometheus.
+Emarketing is an NLP platform that classifies customer emails and feedback using a Scikit-Learn pipeline. It combines reproducible data, ephemeral Kubernetes training, MLflow quality gates, and GitOps delivery to safely promote better models without requiring persistent training infrastructure.
 
 ## Architecture
 
-```text
-Inbound data and user feedback
-            │
-            ▼
-┌───────────────────────────────┐
-│ Data Defense Pipeline         │
-│ • label validation            │
-│ • text-boundary checks        │
-│ • deduplication               │
-└───────────────┬───────────────┘
-                │
-                ▼
-┌───────────────────────────────┐
-│ Kubernetes Training Job        │
-│ • ephemeral batch/v1 Job      │
-│ • CPU and memory limits       │
-└───────────────┬───────────────┘
-                │
-                ├──────────► MLflow Tracking + PostgreSQL
-                │              metrics, lineage, and registry
-                ▼
-┌───────────────────────────────┐
-│ Evaluation Gate               │
-│ Candidate Macro-F1 must meet: │
-│ • absolute floor: ≥ 0.85      │
-│ • champion tolerance: ≥ -0.01 │
-└───────────────┬───────────────┘
-          fail  │  pass
-                │
-                ▼
-┌───────────────────────────────┐
-│ Artifact Release Engine       │
-│ Versioned .tar.gz bundle      │
-│ stored in Amazon S3           │
-└───────────────┬───────────────┘
-                │
-                ▼
-┌───────────────────────────────┐
-│ FastAPI Serving Layer         │
-│ Blue/green rollout + dynamic  │
-│ artifact retrieval            │
-└───────────────────────────────┘
+    Git push
+       │
+       ▼
+    GitHub Actions
+    • hydrate DVC dataset
+    • build training image
+       │
+       ▼
+    Ephemeral Kind cluster
+    • sideload image with kind load docker-image
+    • run resource-limited Kubernetes Job
+       │
+       ▼
+    MLflow quality gate
+    • Macro-F1 ≥ 0.85
+    • regression ≤ 1% vs Champion
+       │
+       ├── Fail → stop pipeline; production unchanged
+       │
+       ▼
+    GitOps commit
+    • update serving image tag
+    • commit to main with [skip ci]
+       │
+       ▼
+    Argo CD sync
+       │
+       ▼
+    KServe InferenceService
+    • FastAPI predictor
+    • autoscaling: 1–5 replicas
+    • production model access via service account
 
-## Repository structure
+## Highlights
 
-```text
-.
-├── .github/
-│   └── workflows/
-│       └── train-on-k8s.yml        # CI/CD workflow for EKS training Jobs
-├── api/
-│   ├── main.py                     # FastAPI application and routes
-│   └── schemas.py                  # Pydantic request/response contracts
-├── training/
-│   ├── dataset.py                  # Data ingestion and schema definitions
-│   ├── governance.py               # MLflow alias and promotion management
-│   ├── publisher.py                # S3 artifact packaging and publication
-│   ├── retrain.py                  # Retraining pipeline and evaluation gate
-│   └── train.py                    # Baseline model training
-├── k8s/
-│   ├── mlflow-deployment.yaml      # MLflow deployment manifest
-│   ├── postgres-stateful.yaml      # PostgreSQL StatefulSet
-│   └── training-job.yaml.tmpl      # Parameterized Kubernetes Job template
-├── monitoring/                     # Prometheus configuration
-├── ui/                             # Streamlit feedback and testing interface
-├── Dockerfile.api                  # Inference API image
-├── Dockerfile.mlflow               # MLflow tracking-server image
-├── Dockerfile.training             # Training-job image
-├── Dockerfile.ui                   # Streamlit UI image
-├── docker-compose.yml              # Local development stack
-└── requirements.txt                # Python dependencies
-```
+- **Zero-cost continuous training** — Kubernetes training runs on an ephemeral Kind cluster inside GitHub Actions, avoiding always-on cloud compute.
+- **Data versioning** — DVC tracks dataset pointers while CI hydrates the required `.parquet` data at runtime.
+- **Governed model promotion** — MLflow evaluates every challenger against the active champion before release.
+- **Safe production delivery** — CI commits declarative image changes; Argo CD pulls and reconciles them into the cluster.
+- **Serverless inference** — KServe manages the FastAPI predictor with concurrency-based autoscaling from one to five replicas.
+
+## Model governance
+
+A candidate model is promoted only when it satisfies both release gates:
+
+| Gate | Requirement |
+| --- | --- |
+| Absolute quality floor | Macro-F1 `>= 0.85` |
+| Degradation guard | Score drop `<= 1.0%` versus the active Champion |
+
+Passing challengers receive the MLflow `@champion` alias, while the previous champion is archived. Failed candidates retain their experiment data, but the pipeline exits with an error and does not alter production.
+
+## Repository layout
+
+    .
+    ├── .github/workflows/
+    │   └── train-on-k8s.yml           # CI training, validation, and GitOps workflow
+    ├── api/
+    │   ├── main.py                    # FastAPI inference application
+    │   └── schemas.py                 # API request and response models
+    ├── training/
+    │   ├── dataset.py                 # Data validation and ingestion
+    │   ├── governance.py              # MLflow Champion/Challenger promotion
+    │   ├── publisher.py               # Versioned model-artifact publishing
+    │   ├── retrain.py                 # End-to-end retraining workflow
+    │   └── train.py                   # Scikit-Learn training pipeline
+    ├── k8s/
+    │   ├── argocd/
+    │   │   └── application.yaml       # Argo CD GitOps application
+    │   ├── serving/
+    │   │   ├── configmap.yaml         # Serving configuration
+    │   │   ├── deployment.yaml        # Kubernetes API deployment manifest
+    │   │   ├── inferenceservice.yaml  # KServe production inference service
+    │   │   └── service.yaml           # API service definition
+    │   ├── mlflow-deployment.yaml     # MLflow tracking server
+    │   ├── postgres-statefulset.yaml  # Persistent MLflow metadata store
+    │   ├── training-job.yaml.template # Base Kubernetes training Job
+    │   └── training-job.yaml.tmpl     # CI-parameterized training Job
+    ├── monitoring/                    # Prometheus configuration
+    ├── ui/                            # Streamlit feedback interface
+    ├── docker-compose.yml             # Local development stack
+    └── requirements.txt               # Python dependencies
+
+## Example retraining run
+
+    [CI] Creating ephemeral Kind cluster...
+    [CI] Loading training image into Kind...
+    [DVC] Hydrating data/emails.parquet
+
+    [K8s] Starting training Job...
+    [TRAIN] Loaded 18,420 labeled messages
+    [TRAIN] Challenger Macro-F1: 0.8924
+
+    [MLflow] Champion Macro-F1:   0.8871
+    [MLflow] Quality floor:       0.8500  PASS
+    [MLflow] Regression check:    +0.60%  PASS
+    [MLflow] Promoting challenger to @champion
+
+    [GitOps] Updating k8s/serving/inferenceservice.yaml
+    [GitOps] Commit created with [skip ci]
+    [Argo CD] Reconciling production InferenceService
 
 ## Quick start
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Python 3.10 or later
-- AWS credentials and Kubernetes access for cloud deployment
+- Python 3.10+
+- DVC
+- kubectl and Kind for local Kubernetes validation
+- Access to Kubernetes, Argo CD, and KServe for production deployment
 
 ### Run locally
 
-Start the complete local development environment:
+    git clone https://github.com/<your-org>/emarketing.git
+    cd emarketing
 
-docker compose up --build -d
+    python -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
 
-Once the services are running:
+    docker compose up --build -d
 
-| Service | URL |
-| --- | --- |
-| Inference API documentation | `http://localhost:8000/docs` |
-| MLflow | `http://localhost:5000` |
-| Feedback UI | `http://localhost:8501` |
-| Prometheus | `http://localhost:9090` |
+Stop the local environment:
 
-Stop the local stack when finished:
+    docker compose down
 
-docker compose down
+### Run retraining locally
 
-## Retraining workflow
+    dvc pull
+    python -m training.retrain
 
-Run the retraining pipeline locally:
+## Delivery and rollback
 
-python -m training.retrain
+Argo CD continuously watches the serving manifests in Git and reconciles the desired state into the production cluster. This provides deployment history, drift correction, and a simple rollback path:
 
-In production, GitHub Actions builds and publishes the training image to Amazon ECR, then dispatches a resource-governed Kubernetes Job to Amazon EKS.
+    git revert <deployment-commit>
+    git push origin main
 
-The retraining lifecycle is:
-
-1. **Sanitize feedback data** by validating labels, removing malformed text, and deduplicating records.
-2. **Train a candidate model** in an isolated Kubernetes Job with defined CPU and memory limits.
-3. **Track and register** the run in MLflow as a `challenger`.
-4. **Evaluate the candidate** against the active `champion`.
-5. **Promote and publish** only when the candidate satisfies both release gates:
-   - `Macro-F1 >= 0.85`
-   - `Candidate Macro-F1 >= Champion Macro-F1 - 0.01`
-6. **Reject failed candidates** by preserving their MLflow telemetry while stopping the deployment pipeline with a non-zero exit code.
-
-## Model release contract
-
-Approved models are distributed as immutable, versioned `.tar.gz` bundles in Amazon S3. Each bundle contains the trained model, validation metadata, and the environment contract required for reproducible serving.
-
-The inference service retrieves the approved artifact and can be deployed through blue/green rollout strategies to minimize disruption.
-
-## Monitoring
-
-LeadSentry exposes Prometheus-compatible metrics for:
-
-- Prediction request volume
-- Inference latency distributions
-- Response outcomes
-- Prediction-class distribution drift
+Argo CD detects the reverted manifest and restores the previous KServe deployment state.

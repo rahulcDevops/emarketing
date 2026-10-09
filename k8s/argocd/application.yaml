@@ -1,19 +1,19 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: leadsentry-api-prod
+  name: leadsentry-serving-prod
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: "https://github.com/your-username/leadsentry.git"
+    repoURL: "https://github.com/rahulcDevops/emarketing.git"
     targetRevision: main
     path: k8s/serving
   destination:
     server: "https://kubernetes.default.svc"
-    namespace: leadsentry-prod
+    namespace: leadsentry-serving
   syncPolicy:
     automated:
       prune: true

@@ -1,0 +1,40 @@
+apiVersion: "serving.kserve.io/v1beta1"
+kind: "InferenceService"
+metadata:
+  name: "leadsentry-intent"
+  namespace: "leadsentry-serving"
+  labels:
+    app.kubernetes.io/name: "leadsentry"
+    app.kubernetes.io/component: "predictor"
+spec:
+  predictor:
+    serviceAccountName: "kserve-s3-sa"
+    minReplicas: 1
+    maxReplicas: 5
+    scaleTarget: 80
+    scaleMetric: "concurrency"
+    containers:
+      - name: "kserve-container"
+        image: "ghcr.io/your-username/leadsentry-api:v1.0.0"
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: "MODEL_DIR"
+            value: "/mnt/models"
+          - name: "ENVIRONMENT"
+            value: "production"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        ports:
+          - containerPort: 8000
+            protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
